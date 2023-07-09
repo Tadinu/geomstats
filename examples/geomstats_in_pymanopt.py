@@ -11,22 +11,22 @@ import logging
 import os
 
 import pymanopt
-from pymanopt.manifolds.manifold import EuclideanEmbeddedSubmanifold
-from pymanopt.solvers import SteepestDescent
+from pymanopt.manifolds import Euclidean
+from pymanopt.optimizers import SteepestDescent
 
 import geomstats.backend as gs
 from geomstats.geometry.hypersphere import Hypersphere
 
 
-class GeomstatsSphere(EuclideanEmbeddedSubmanifold):
+class GeomstatsSphere(Euclidean):
     """A simple adapter class which proxies calls by pymanopt's solvers to
     `Manifold` subclasses to the underlying geomstats `Hypersphere` class.
     """
 
     def __init__(self, ambient_dimension):
-        dim = ambient_dimension - 1
+        dim = ambient_dimension
         self._sphere = Hypersphere(dim)
-        super().__init__("{}-dimensional Hypersphere".format(dim), dim)
+        super().__init__(dim)
 
     def norm(self, base_point, tangent_vector):
         return self._sphere.metric.norm(tangent_vector, base_point=base_point)
@@ -60,28 +60,30 @@ class GeomstatsSphere(EuclideanEmbeddedSubmanifold):
         return gs.zeros_like(self.rand())
 
 
-def estimate_dominant_eigenvector(matrix):
-    """Returns the dominant eigenvector of the symmetric matrix A by minimizing
+def estimate_dominant_eigenvector(manifold, square_mat):
+    """Returns the dominant eigenvector of the symmetric square matrix A by minimizing
     the Rayleigh quotient -x' * A * x / (x' * x).
     """
-    num_rows, num_columns = gs.shape(matrix)
+    num_rows, num_columns = gs.shape(square_mat)
     if num_rows != num_columns:
         raise ValueError("Matrix must be square.")
-    if not gs.allclose(gs.sum(matrix - gs.transpose(matrix)), 0.0):
+    if not gs.allclose(gs.sum(square_mat - gs.transpose(square_mat)), 0.0):
         raise ValueError("Matrix must be symmetric.")
 
-    @pymanopt.function.Callable
+    if manifold.dim != num_rows:
+        raise ValueError("Manifold's dimension must be same as rank of square matrix")
+
+    @pymanopt.function.numpy(manifold)
     def cost(vector):
-        return -gs.dot(vector, gs.dot(matrix, vector))
+        return -gs.dot(vector, gs.dot(square_mat, vector))
 
-    @pymanopt.function.Callable
+    @pymanopt.function.numpy(manifold)
     def egrad(vector):
-        return -2 * gs.dot(matrix, vector)
+        return -2 * gs.dot(square_mat, vector)
 
-    sphere = GeomstatsSphere(num_columns)
-    problem = pymanopt.Problem(manifold=sphere, cost=cost, egrad=egrad)
+    problem = pymanopt.Problem(manifold, cost=cost, euclidean_gradient=egrad)
     solver = SteepestDescent()
-    return solver.solve(problem)
+    return solver.run(problem).point
 
 
 if __name__ == "__main__":
@@ -89,13 +91,14 @@ if __name__ == "__main__":
         raise SystemExit("This example currently only supports the numpy backend")
 
     ambient_dim = 128
+    sphere = GeomstatsSphere(ambient_dim)
     mat = gs.random.normal(size=(ambient_dim, ambient_dim))
     mat = 0.5 * (mat + mat.T)
 
     eigenvalues, eigenvectors = gs.linalg.eig(mat)
     dominant_eigenvector = eigenvectors[:, gs.argmax(eigenvalues)]
 
-    dominant_eigenvector_estimate = estimate_dominant_eigenvector(mat)
+    dominant_eigenvector_estimate = estimate_dominant_eigenvector(sphere, mat)
     if gs.sign(dominant_eigenvector[0]) != gs.sign(dominant_eigenvector_estimate[0]):
         dominant_eigenvector_estimate = -dominant_eigenvector_estimate
 

@@ -1,4 +1,5 @@
 """Discrete-path related machinery."""
+from typing_extensions import Unpack
 
 import geomstats.backend as gs
 from geomstats.numerics.finite_differences import forward_difference
@@ -52,7 +53,7 @@ class UniformlySampledPathEnergy:
         tangent_vecs = forward_difference(path, axis=time_axis)
         return self._space.metric.squared_norm(
             tangent_vecs,
-            path[..., :-1, *point_ndim_slc],
+            path[..., :-1, Unpack[point_ndim_slc]],
         ) / (2 * (n_time - 1))
 
     def energy(self, path):

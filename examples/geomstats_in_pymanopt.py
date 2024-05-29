@@ -11,14 +11,14 @@ import logging
 import os
 
 import pymanopt
-from pymanopt.manifolds.manifold import EuclideanEmbeddedSubmanifold
-from pymanopt.solvers import SteepestDescent
+from pymanopt.manifolds.euclidean import Euclidean
+from pymanopt.optimizers.steepest_descent import SteepestDescent
 
 import geomstats.backend as gs
 from geomstats.geometry.hypersphere import Hypersphere
 
 
-class GeomstatsSphere(EuclideanEmbeddedSubmanifold):
+class GeomstatsSphere(Euclidean):
     """A simple adapter class which proxies calls by pymanopt's solvers to
     `Manifold` subclasses to the underlying geomstats `Hypersphere` class.
     """
@@ -70,18 +70,19 @@ def estimate_dominant_eigenvector(matrix):
     if not gs.allclose(gs.sum(matrix - gs.transpose(matrix)), 0.0):
         raise ValueError("Matrix must be symmetric.")
 
-    @pymanopt.function.Callable
+    sphere = GeomstatsSphere(num_columns)
+
+    @pymanopt.function.numpy(sphere)
     def cost(vector):
         return -gs.dot(vector, gs.dot(matrix, vector))
 
-    @pymanopt.function.Callable
+    @pymanopt.function.numpy(sphere)
     def egrad(vector):
         return -2 * gs.dot(matrix, vector)
 
-    sphere = GeomstatsSphere(num_columns)
     problem = pymanopt.Problem(manifold=sphere, cost=cost, egrad=egrad)
     solver = SteepestDescent()
-    return solver.solve(problem)
+    return solver.run(problem)
 
 
 if __name__ == "__main__":

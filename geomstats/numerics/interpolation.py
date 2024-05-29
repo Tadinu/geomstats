@@ -1,4 +1,5 @@
 """Interpolation machinery."""
+from typing_extensions import Unpack
 
 from abc import ABC, abstractmethod
 
@@ -100,8 +101,8 @@ class _LinearInterpolator1D(Interpolator, ABC):
         end_index = gs.where(max_bound_reached, interval_index, interval_index + 1)
 
         point_ndim_slc = (slice(None),) * self.point_ndim
-        initial_point = self.data[..., interval_index, *point_ndim_slc]
-        end_point = self.data[..., end_index, *point_ndim_slc]
+        initial_point = self.data[..., interval_index, Unpack[point_ndim_slc]]
+        end_point = self.data[..., end_index, Unpack[point_ndim_slc]]
 
         ratio = self._get_ratio(t, interval_index, end_index)
 
